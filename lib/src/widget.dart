@@ -25,6 +25,7 @@ class ForceGraphView extends StatefulWidget {
     this.paused = false,
     this.autoFit = true,
     this.fitToken = 0,
+    this.semanticLabel,
     this.onNodeTap,
     this.onNodeHover,
     this.onBackgroundTap,
@@ -42,6 +43,7 @@ class ForceGraphView extends StatefulWidget {
   final bool paused;
   final bool autoFit;
   final int fitToken;
+  final String? semanticLabel;
   final NodeCallback? onNodeTap;
   final NodeHoverCallback? onNodeHover;
   final VoidCallback? onBackgroundTap;
@@ -55,7 +57,9 @@ class _ForceGraphViewState extends State<ForceGraphView>
     with SingleTickerProviderStateMixin {
   late ForceGraphController _controller;
   late Ticker _ticker;
+  late ForceGraphConfig _mobileConfig;
   final ValueNotifier<int> _frame = ValueNotifier<int>(0);
+  final Map<String, TextPainter> _labelCache = {};
 
   Size _size = Size.zero;
   bool _initialized = false;
@@ -68,6 +72,8 @@ class _ForceGraphViewState extends State<ForceGraphView>
   double _hoverStartMs = 0;
 
   bool _userTookOver = false;
+
+  int _quietFrames = 0;
 
   double _startScale = 1;
   Offset _startWorldFocal = Offset.zero;
@@ -83,11 +89,12 @@ class _ForceGraphViewState extends State<ForceGraphView>
   bool get _isMobile => _size.width > 0 && _size.width < widget.breakpoint;
 
   ForceGraphConfig get _effectiveConfig =>
-      _isMobile ? (widget.mobileConfig ?? ForceGraphConfig.mobile()) : widget.config;
+      _isMobile ? _mobileConfig : widget.config;
 
   @override
   void initState() {
     super.initState();
+    _mobileConfig = widget.mobileConfig ?? ForceGraphConfig.mobile();
     _controller = ForceGraphController(
       nodes: widget.nodes,
       links: widget.links,
@@ -100,12 +107,24 @@ class _ForceGraphViewState extends State<ForceGraphView>
   @override
   void didUpdateWidget(covariant ForceGraphView old) {
     super.didUpdateWidget(old);
-    _controller.updateConfig(_effectiveConfig);
+    if (!identical(widget.mobileConfig, old.mobileConfig)) {
+      _mobileConfig = widget.mobileConfig ?? ForceGraphConfig.mobile();
+    }
+    final dataChanged = !identical(widget.nodes, old.nodes) ||
+        !identical(widget.links, old.links);
+    if (dataChanged) {
+      _rebuildController();
+    } else {
+      _controller.updateConfig(_effectiveConfig);
+    }
     if (widget.focusId != null && widget.focusId != old.focusId) {
       _focusOn(widget.focusId!);
     }
     if (widget.fitToken != old.fitToken) {
       fitView();
+    }
+    if (widget.paused != old.paused && !widget.paused) {
+      _wake();
     }
   }
 
@@ -116,10 +135,26 @@ class _ForceGraphViewState extends State<ForceGraphView>
     super.dispose();
   }
 
+  void _rebuildController() {
+    _controller = ForceGraphController(
+      nodes: widget.nodes,
+      links: widget.links,
+      config: _effectiveConfig,
+    );
+    widget.onReady?.call(_controller);
+    _userTookOver = false;
+    _hoveredId = null;
+    _tappedId = null;
+    _dragNode = null;
+    _labelCache.clear();
+    _requestAutoFit();
+    _wake();
+  }
+
   void _onFrame(Duration elapsed) {
     if (!widget.paused) _controller.tick();
 
-    if (_fitRequested && !_userTookOver) {
+    if (_fitRequested) {
       _fitRequested = false;
       _beginFit(elapsed);
     }
@@ -133,7 +168,30 @@ class _ForceGraphViewState extends State<ForceGraphView>
       if (t >= 1) _fitActive = false;
     }
 
+    final cfg = _effectiveConfig;
+    if (cfg.idleSleep) {
+      final active = _dragNode != null ||
+          _fitActive ||
+          _fitRequested ||
+          (_hoveredId != null && _nowMs() - _hoverStartMs < 700);
+      if (!active &&
+          _controller.meanKineticEnergy < cfg.sleepSpeedThreshold) {
+        if (++_quietFrames >= cfg.sleepFrames) {
+          _frame.value++;
+          _ticker.stop();
+          return;
+        }
+      } else {
+        _quietFrames = 0;
+      }
+    }
+
     _frame.value++;
+  }
+
+  void _wake() {
+    _quietFrames = 0;
+    if (!_ticker.isActive) _ticker.start();
   }
 
   static double _easeInOutCubic(double t) {
@@ -168,6 +226,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
   }
 
   void _onScaleStart(ScaleStartDetails d) {
+    _wake();
     _takeOver();
     _startScale = _scale;
     _startWorldFocal = _toWorld(d.localFocalPoint);
@@ -177,6 +236,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
         _dragNode = n;
         n.fx = n.x;
         n.fy = n.y;
+        _controller.simulation.alphaTarget = _effectiveConfig.dragAlphaTarget;
         _controller.reheat();
         return;
       }
@@ -185,13 +245,16 @@ class _ForceGraphViewState extends State<ForceGraphView>
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (_dragNode != null && d.pointerCount == 1) {
-      final w = _toWorld(d.localFocalPoint);
-      _dragNode!
-        ..fx = w.dx
-        ..fy = w.dy;
-      _controller.reheat();
-      return;
+    _wake();
+    if (_dragNode != null) {
+      if (d.pointerCount == 1) {
+        final w = _toWorld(d.localFocalPoint);
+        _dragNode!
+          ..fx = w.dx
+          ..fy = w.dy;
+        return;
+      }
+      _releaseDrag();
     }
     final cfg = _effectiveConfig;
     final newScale =
@@ -202,16 +265,21 @@ class _ForceGraphViewState extends State<ForceGraphView>
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
-    if (_dragNode != null) {
-      _dragNode!
-        ..fx = null
-        ..fy = null;
-      _controller.reheat();
-      _dragNode = null;
-    }
+    _releaseDrag();
+  }
+
+  void _releaseDrag() {
+    if (_dragNode == null) return;
+    _dragNode!
+      ..fx = null
+      ..fy = null;
+    _dragNode = null;
+    _controller.simulation.alphaTarget = _effectiveConfig.alphaTarget;
+    _controller.reheat();
   }
 
   void _onTapUp(TapUpDetails d) {
+    _wake();
     _takeOver();
     final n = _hitTest(d.localPosition);
     if (n == null) {
@@ -245,11 +313,11 @@ class _ForceGraphViewState extends State<ForceGraphView>
     if (_hoveredId == id) return;
     _hoveredId = id;
     if (id != null) _hoverStartMs = _nowMs();
+    _wake();
     widget.onNodeHover?.call(id == null ? null : _controller.nodeById(id));
   }
 
-  double _nowMs() =>
-      DateTime.now().microsecondsSinceEpoch / 1000.0;
+  double _nowMs() => DateTime.now().microsecondsSinceEpoch / 1000.0;
 
   void _focusOn(String id) {
     final n = _controller.nodeById(id);
@@ -257,17 +325,21 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _takeOver();
     final cfg = _effectiveConfig;
     final target = 3.0.clamp(cfg.minZoom, cfg.maxZoom).toDouble();
-    _animateTo(target, Offset(_size.width / 2, _size.height / 2) -
-        Offset(n.x * target, n.y * target));
+    _animateTo(
+        target,
+        Offset(_size.width / 2, _size.height / 2) -
+            Offset(n.x * target, n.y * target));
     _setHovered(id);
   }
 
   void _requestAutoFit() {
     if (!widget.autoFit) return;
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (!mounted || _userTookOver) return;
-      fitView();
-    });
+    for (final ms in const [300, 1200]) {
+      Future.delayed(Duration(milliseconds: ms), () {
+        if (!mounted || _userTookOver) return;
+        fitView();
+      });
+    }
   }
 
   void fitView({double? padding}) {
@@ -304,9 +376,9 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _fitToScale = scale;
     _fitFromOffset = _offset;
     _fitToOffset = offset;
-    _fitRequested = false;
     _fitActive = false;
     _fitRequested = true;
+    _wake();
   }
 
   void _beginFit(Duration elapsed) {
@@ -329,34 +401,39 @@ class _ForceGraphViewState extends State<ForceGraphView>
             _requestAutoFit();
           }
         }
-        return Listener(
-          onPointerSignal: _onPointerSignal,
-          child: MouseRegion(
-            onHover: _onHover,
-            onExit: (_) => _setHovered(null),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onScaleStart: _onScaleStart,
-              onScaleUpdate: _onScaleUpdate,
-              onScaleEnd: _onScaleEnd,
-              onTapUp: _onTapUp,
-              child: AnimatedBuilder(
-                animation: _frame,
-                builder: (context, _) {
-                  return CustomPaint(
-                    size: Size.infinite,
-                    painter: ForceGraphPainter(
-                      controller: _controller,
-                      config: _effectiveConfig,
-                      theme: widget.theme,
-                      scale: _scale,
-                      offset: _offset,
-                      hoveredId: _hoveredId,
-                      selectedId: widget.selectedId,
-                      hoverElapsedMs: _nowMs() - _hoverStartMs,
-                    ),
-                  );
-                },
+        return Semantics(
+          image: true,
+          label: widget.semanticLabel ?? 'Force-directed graph',
+          child: Listener(
+            onPointerSignal: _onPointerSignal,
+            child: MouseRegion(
+              onHover: _onHover,
+              onExit: (_) => _setHovered(null),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onScaleStart: _onScaleStart,
+                onScaleUpdate: _onScaleUpdate,
+                onScaleEnd: _onScaleEnd,
+                onTapUp: _onTapUp,
+                child: AnimatedBuilder(
+                  animation: _frame,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      size: Size.infinite,
+                      painter: ForceGraphPainter(
+                        controller: _controller,
+                        config: _effectiveConfig,
+                        theme: widget.theme,
+                        scale: _scale,
+                        offset: _offset,
+                        hoveredId: _hoveredId,
+                        selectedId: widget.selectedId,
+                        hoverElapsedMs: _nowMs() - _hoverStartMs,
+                        labelCache: _labelCache,
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -367,6 +444,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
 
   void _onPointerSignal(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
+    _wake();
     _takeOver();
     final cfg = _effectiveConfig;
     final delta = -e.scrollDelta.dy;
