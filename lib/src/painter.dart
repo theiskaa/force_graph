@@ -15,6 +15,7 @@ class ForceGraphPainter extends CustomPainter {
     required this.hoveredId,
     required this.selectedId,
     required this.hoverElapsedMs,
+    required this.labelCache,
   });
 
   final ForceGraphController controller;
@@ -25,6 +26,29 @@ class ForceGraphPainter extends CustomPainter {
   final String? hoveredId;
   final String? selectedId;
   final double hoverElapsedMs;
+  final Map<String, TextPainter> labelCache;
+
+  TextPainter _label(String text, Color color, double fontSize) {
+    final key = '$text|${fontSize.toStringAsFixed(1)}|${color.toARGB32()}';
+    final cached = labelCache[key];
+    if (cached != null) return cached;
+    if (labelCache.length > 600) labelCache.clear();
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontFamily: theme.fontFamily,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    labelCache[key] = tp;
+    return tp;
+  }
 
   Offset _screen(double x, double y) =>
       Offset(x * scale + offset.dx, y * scale + offset.dy);
@@ -134,8 +158,8 @@ class ForceGraphPainter extends CustomPainter {
 
       final worldFont = math.min(
           config.labelFontSize / scale, config.labelMaxFontSize);
-      final screenFont = worldFont * scale;
-      if (screenFont >= config.labelMinScreenFontSize && node.label.isNotEmpty) {
+      if (worldFont >= config.labelMinWorldFontSize && node.label.isNotEmpty) {
+        final screenFont = worldFont * scale;
         Color labelColor;
         if (isDimmed) {
           labelColor = theme.labelDim;
@@ -144,19 +168,7 @@ class ForceGraphPainter extends CustomPainter {
         } else {
           labelColor = theme.label;
         }
-        final tp = TextPainter(
-          text: TextSpan(
-            text: node.label,
-            style: TextStyle(
-              color: labelColor,
-              fontSize: screenFont,
-              fontFamily: theme.fontFamily,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          textAlign: TextAlign.center,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tp = _label(node.label, labelColor, screenFont);
         tp.paint(
           canvas,
           Offset(pos.dx - tp.width / 2, pos.dy + radius + 4 * scale),
