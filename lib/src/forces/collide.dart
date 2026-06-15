@@ -5,6 +5,12 @@ import 'package:force_graph/src/lcg.dart';
 import 'package:force_graph/src/models.dart';
 import 'package:force_graph/src/quadtree.dart';
 
+/// The collision force, a port of d3-force's `forceCollide`.
+///
+/// Resolves overlaps between node disks so they don't visually intersect, using
+/// anticipated positions (`x + vx`) and a quadtree to find candidate pairs.
+/// Larger-radius nodes are displaced less (the correction is split by area), and
+/// [iterations] passes per tick make separation firmer.
 class CollideForce implements Force {
   CollideForce({
     required this.radius,
@@ -12,8 +18,13 @@ class CollideForce implements Force {
     this.iterations = 3,
   });
 
+  /// Returns the collision radius of a node.
   final double Function(ForceNode) radius;
+
+  /// Fraction of the overlap resolved per pass, in `[0, 1]`.
   double strength;
+
+  /// Separation passes per tick.
   int iterations;
 
   late List<ForceNode> _nodes;
@@ -49,6 +60,8 @@ class CollideForce implements Force {
     }
   }
 
+  /// Records the largest radius in each cell so [_applyTo] can prune cells that
+  /// are too far to overlap the current node.
   void _prepare(QuadNode quad, double x0, double y0, double x1, double y1) {
     if (quad.data != null) {
       quad.r = _radii[quad.data!.index];
@@ -60,11 +73,14 @@ class CollideForce implements Force {
     }
   }
 
+  /// Pushes the current node and an overlapping [quad] apart, or returns true to
+  /// prune a cell that cannot reach the node's disk.
   bool _applyTo(QuadNode quad, double x0, double y0, double x1, double y1) {
     final rj = quad.r;
     final r = _ri + rj;
     if (quad.data != null) {
       final other = quad.data!;
+      // index check resolves each unordered pair exactly once.
       if (other.index > _node.index) {
         var x = _xi - other.x - other.vx;
         var y = _yi - other.y - other.vy;

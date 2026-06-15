@@ -5,6 +5,13 @@ import 'package:force_graph/src/lcg.dart';
 import 'package:force_graph/src/models.dart';
 import 'package:force_graph/src/quadtree.dart';
 
+/// The many-body (charge) force, a port of d3-force's `forceManyBody`.
+///
+/// Negative [strength] repels nodes and positive attracts; the Apeirron graph
+/// uses a strong negative charge so nodes spread out. Long-range interaction is
+/// approximated with a Barnes-Hut quadtree: a cell far enough away (per the
+/// [theta] criterion) is treated as a single aggregate body, making the cost
+/// roughly `O(n log n)` instead of `O(n²)`.
 class ManyBodyForce implements Force {
   ManyBodyForce({
     required this.strength,
@@ -15,10 +22,17 @@ class ManyBodyForce implements Force {
        distanceMin2 = distanceMin * distanceMin,
        theta2 = theta * theta;
 
+  /// Per-node charge; negative repels.
   double strength;
+
+  /// Minimum interaction distance, clamping the force between very close nodes.
   final double distanceMin;
   final double distanceMin2;
+
+  /// Squared maximum interaction distance; pairs farther apart are ignored.
   final double distanceMax2;
+
+  /// Barnes-Hut accuracy parameter: smaller is more accurate and slower.
   final double theta;
   final double theta2;
 
@@ -50,6 +64,8 @@ class ManyBodyForce implements Force {
     }
   }
 
+  /// Rolls each cell's summed charge and charge-weighted centre of mass up the
+  /// tree (post-order), so [_applyTo] can approximate distant cells.
   void _accumulate(QuadNode quad, double x0, double y0, double x1, double y1) {
     var strength = 0.0;
     if (quad.children != null) {
@@ -77,6 +93,8 @@ class ManyBodyForce implements Force {
     quad.value = strength;
   }
 
+  /// Accumulates the charge from [quad] onto the current node. Returns true to
+  /// stop descending once the cell is approximated or out of range.
   bool _applyTo(QuadNode quad, double x0, double y0, double x1, double y1) {
     if (quad.value == 0) return true;
     var x = quad.cx - _node.x;
@@ -84,6 +102,8 @@ class ManyBodyForce implements Force {
     final w = x1 - x0;
     var l = x * x + y * y;
 
+    // Barnes-Hut: if the cell is far enough relative to its width, treat its
+    // whole mass as one body at the centre of mass and stop descending.
     if (w * w / theta2 < l) {
       if (l < distanceMax2) {
         if (x == 0) {

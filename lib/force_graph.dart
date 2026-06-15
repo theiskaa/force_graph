@@ -1,3 +1,11 @@
+/// A force-directed graph widget for Flutter.
+///
+/// A faithful Dart port of d3-force (charge, link, and collide forces with a
+/// Barnes-Hut quadtree and velocity-Verlet integration), wrapped in an
+/// interactive [ForceGraphView] with pan, zoom, drag, hover, and tap. Tune the
+/// physics and sizing with [ForceGraphConfig] and the look with
+/// [ForceGraphTheme]; for advanced control, drive a [ForceGraphController]
+/// directly.
 library;
 
 export 'package:force_graph/src/config.dart';

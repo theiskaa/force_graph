@@ -1,5 +1,12 @@
 import 'package:force_graph/src/models.dart';
 
+/// A node in a [Quadtree]: either a leaf holding [data] (with [next] chaining
+/// coincident points) or an internal node holding four [children].
+///
+/// The aggregate fields are populated by [Quadtree.visitAfter] and consumed by
+/// the forces: [value]/[cx]/[cy] are the summed charge and centre of mass for
+/// the many-body Barnes-Hut approximation; [r] is the largest radius in the
+/// subtree, used by the collide force for pruning.
 class QuadNode {
   ForceNode? data;
   QuadNode? next;
@@ -13,17 +20,30 @@ class QuadNode {
   bool get isLeaf => children == null;
 }
 
+/// Visitor for [Quadtree.visit]: receives a node and the bounds of the square
+/// region it covers, and returns true to skip descending into its children.
 typedef QuadVisitor = bool Function(
     QuadNode node, double x0, double y0, double x1, double y1);
 
+/// A square quadtree, a focused port of d3-quadtree covering just the
+/// operations the forces need.
+///
+/// Unlike d3-quadtree's incremental `cover`, the bounding square is computed up
+/// front from the point extent; the result is an equivalent containing square,
+/// and Barnes-Hut output is insensitive to the exact subdivision origin. When
+/// [_anticipate] is set the tree is built over anticipated positions (`x + vx`),
+/// which the collide force uses.
 class Quadtree {
   QuadNode? root;
+
+  /// Bounds of the root square region.
   late double x0, y0, x1, y1;
   final bool _anticipate;
 
   double _cx(ForceNode n) => _anticipate ? n.x + n.vx : n.x;
   double _cy(ForceNode n) => _anticipate ? n.y + n.vy : n.y;
 
+  /// Builds a tree over [nodes]; pass `anticipate: true` to index by `x + vx`.
   Quadtree(List<ForceNode> nodes, {bool anticipate = false})
       : _anticipate = anticipate {
     var minX = double.infinity,
@@ -53,6 +73,8 @@ class Quadtree {
     }
   }
 
+  /// Inserts [d] at `(x, y)`, descending to a leaf cell and subdividing until
+  /// it separates from any resident point (or chaining if coincident).
   void _add(ForceNode d, double x, double y) {
     if (x.isNaN || y.isNaN) return;
     final leaf = QuadNode()..data = d;
@@ -128,6 +150,8 @@ class Quadtree {
       }
       i = (bottom ? 2 : 0) | (right ? 1 : 0);
       j = ((exY >= ym ? 2 : 0) | (exX >= xm ? 1 : 0));
+      // Depth cap: if two distinct points can't be separated within float
+      // precision, store them as a coincident chain instead of looping forever.
       if (++depth > 64) {
         leaf.next = node;
         parent.children![i] = leaf;
@@ -138,6 +162,8 @@ class Quadtree {
     parent.children![i] = leaf;
   }
 
+  /// Post-order traversal (children before parent), used to roll aggregates up
+  /// the tree.
   void visitAfter(void Function(QuadNode, double, double, double, double) cb) {
     if (root == null) return;
     final stack = <_Quad>[_Quad(root!, x0, y0, x1, y1)];
@@ -161,6 +187,7 @@ class Quadtree {
     }
   }
 
+  /// Pre-order traversal with pruning; [cb] returns true to skip a subtree.
   void visit(QuadVisitor cb) {
     if (root == null) return;
     final stack = <_Quad>[_Quad(root!, x0, y0, x1, y1)];
@@ -179,6 +206,7 @@ class Quadtree {
   }
 }
 
+/// A node paired with its region bounds, used as a traversal stack entry.
 class _Quad {
   _Quad(this.node, this.x0, this.y0, this.x1, this.y1);
   final QuadNode node;

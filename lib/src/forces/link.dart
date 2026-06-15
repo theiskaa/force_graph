@@ -4,6 +4,12 @@ import 'package:force_graph/src/forces/force.dart';
 import 'package:force_graph/src/lcg.dart';
 import 'package:force_graph/src/models.dart';
 
+/// The link (spring) force, a port of d3-force's `forceLink`.
+///
+/// Each link pulls its endpoints toward a rest [distance] with the given
+/// [strength], optionally over several [iterations] per tick for stiffer
+/// constraints. The correction is split by a degree-based bias so high-degree
+/// hubs move less than their leaf neighbours.
 class LinkForce implements Force {
   LinkForce(
     this.links, {
@@ -12,9 +18,16 @@ class LinkForce implements Force {
     this.iterations = 1,
   });
 
+  /// Edges this force acts on (already filtered to valid endpoints).
   final List<ForceLink> links;
+
+  /// Rest length each link relaxes toward.
   double distance;
+
+  /// Spring stiffness in `[0, 1]`.
   double strength;
+
+  /// Relaxation passes per tick.
   int iterations;
 
   late Lcg _random;

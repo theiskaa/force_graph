@@ -8,9 +8,19 @@ import 'package:force_graph/src/controller.dart';
 import 'package:force_graph/src/models.dart';
 import 'package:force_graph/src/painter.dart';
 
+/// Called with the node that was tapped.
 typedef NodeCallback = void Function(ForceNode node);
+
+/// Called with the hovered node, or null when the hover ends.
 typedef NodeHoverCallback = void Function(ForceNode? node);
 
+/// An interactive force-directed graph.
+///
+/// Runs a [ForceGraphController] over [nodes] and [links], paints them, and
+/// handles pan, zoom, drag-to-pin, hover, and tap. The layout auto-fits on first
+/// render (until the user interacts) and, by default, sleeps once it settles to
+/// save CPU. Supply [config]/[mobileConfig] to tune physics and [theme] to
+/// restyle.
 class ForceGraphView extends StatefulWidget {
   const ForceGraphView({
     super.key,
@@ -32,21 +42,45 @@ class ForceGraphView extends StatefulWidget {
     this.onReady,
   });
 
+  /// Graph data. Changing the list identity rebuilds the simulation.
   final List<ForceNode> nodes;
   final List<ForceLink> links;
+
+  /// Physics/sizing for wide layouts, and the optional variant used below
+  /// [breakpoint] (defaults to [ForceGraphConfig.mobile]).
   final ForceGraphConfig config;
   final ForceGraphConfig? mobileConfig;
+
+  /// Width below which [mobileConfig] applies.
   final double breakpoint;
+
+  /// Colours and font.
   final ForceGraphTheme theme;
+
+  /// Node drawn with a selection ring, controlled by the host.
   final String? selectedId;
+
+  /// Setting this to a new id pans/zooms to centre that node.
   final String? focusId;
+
+  /// Pauses the simulation while still allowing pan/zoom.
   final bool paused;
+
+  /// Whether to auto-fit the graph on first render.
   final bool autoFit;
+
+  /// Bump this to any new value to re-fit the graph on demand.
   final int fitToken;
+
+  /// Accessibility label for the canvas.
   final String? semanticLabel;
+
+  /// Tap / hover / background-tap callbacks.
   final NodeCallback? onNodeTap;
   final NodeHoverCallback? onNodeHover;
   final VoidCallback? onBackgroundTap;
+
+  /// Called once with the controller after it is created, for advanced control.
   final void Function(ForceGraphController controller)? onReady;
 
   @override
@@ -135,6 +169,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
     super.dispose();
   }
 
+  /// Recreates the controller after the node/link set changes and re-fits.
   void _rebuildController() {
     _controller = ForceGraphController(
       nodes: widget.nodes,
@@ -151,6 +186,9 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _wake();
   }
 
+  /// The render loop: ticks the simulation, advances any fit animation, and —
+  /// when [ForceGraphConfig.idleSleep] is on — stops the ticker once the layout
+  /// has been settled and idle for [ForceGraphConfig.sleepFrames] frames.
   void _onFrame(Duration elapsed) {
     if (!widget.paused) _controller.tick();
 
@@ -189,6 +227,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _frame.value++;
   }
 
+  /// Restarts the render loop if it has slept; called on any input or change.
   void _wake() {
     _quietFrames = 0;
     if (!_ticker.isActive) _ticker.start();
@@ -200,12 +239,15 @@ class _ForceGraphViewState extends State<ForceGraphView>
         : 1 - math.pow(-2 * t + 2, 3).toDouble() / 2;
   }
 
+  /// Screen-to-world and world-to-screen transforms for the current view.
   Offset _toWorld(Offset screen) =>
       Offset((screen.dx - _offset.dx) / _scale, (screen.dy - _offset.dy) / _scale);
 
   Offset _toScreen(double x, double y) =>
       Offset(x * _scale + _offset.dx, y * _scale + _offset.dy);
 
+  /// Returns the topmost node under a local point, or null. The hit area is
+  /// enlarged on touch via [ForceGraphConfig.hitRadiusMultiplier]/`hitRadiusMin`.
   ForceNode? _hitTest(Offset local) {
     final cfg = _effectiveConfig;
     ForceNode? best;
@@ -219,12 +261,15 @@ class _ForceGraphViewState extends State<ForceGraphView>
     return best;
   }
 
+  /// Marks that the user has taken control, cancelling auto-fit.
   void _takeOver() {
     _userTookOver = true;
     _fitActive = false;
     _fitRequested = false;
   }
 
+  /// A single pointer landing on a node starts a drag (pinning it and heating
+  /// the layout); otherwise the gesture pans/zooms the view.
   void _onScaleStart(ScaleStartDetails d) {
     _wake();
     _takeOver();
@@ -244,6 +289,8 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _dragNode = null;
   }
 
+  /// Drags the pinned node with a single pointer; a second finger releases the
+  /// drag and the gesture becomes a pan/zoom that keeps the focal point fixed.
   void _onScaleUpdate(ScaleUpdateDetails d) {
     _wake();
     if (_dragNode != null) {
@@ -268,6 +315,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _releaseDrag();
   }
 
+  /// Unpins the dragged node and restores the resting heat floor.
   void _releaseDrag() {
     if (_dragNode == null) return;
     _dragNode!
@@ -278,6 +326,8 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _controller.reheat();
   }
 
+  /// Taps a node (or the background). On touch, the first tap selects/hovers and
+  /// a second tap on the same node fires [ForceGraphView.onNodeTap].
   void _onTapUp(TapUpDetails d) {
     _wake();
     _takeOver();
@@ -309,6 +359,8 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _setHovered(n?.id);
   }
 
+  /// Updates the hovered node (restarting the hover animation clock) and
+  /// notifies the host.
   void _setHovered(String? id) {
     if (_hoveredId == id) return;
     _hoveredId = id;
@@ -319,6 +371,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
 
   double _nowMs() => DateTime.now().microsecondsSinceEpoch / 1000.0;
 
+  /// Pans/zooms to centre the node with the given [id].
   void _focusOn(String id) {
     final n = _controller.nodeById(id);
     if (n == null || n.x.isNaN) return;
@@ -332,6 +385,8 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _setHovered(id);
   }
 
+  /// Schedules the initial fit in two passes (early, then after the warmup
+  /// spread settles), each skipped if the user has already taken over.
   void _requestAutoFit() {
     if (!widget.autoFit) return;
     for (final ms in const [300, 1200]) {
@@ -342,6 +397,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
     }
   }
 
+  /// Animates the view to frame all nodes with the given [padding].
   void fitView({double? padding}) {
     if (_controller.nodes.isEmpty || _size == Size.zero) return;
     var minX = double.infinity,
@@ -371,6 +427,8 @@ class _ForceGraphViewState extends State<ForceGraphView>
     _animateTo(scale, offset);
   }
 
+  /// Queues a fit/focus animation from the current view to the target; the
+  /// render loop starts it on the next frame so it has a frame-time origin.
   void _animateTo(double scale, Offset offset) {
     _fitFromScale = _scale;
     _fitToScale = scale;
@@ -442,6 +500,7 @@ class _ForceGraphViewState extends State<ForceGraphView>
     );
   }
 
+  /// Mouse-wheel / trackpad zoom centred on the pointer.
   void _onPointerSignal(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
     _wake();

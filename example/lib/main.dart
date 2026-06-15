@@ -1,3 +1,7 @@
+/// Minimal example: loads the real Apeirron graph from a bundled JSON asset and
+/// renders it full-screen with [ForceGraphView].
+library;
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -8,6 +12,7 @@ void main() {
   runApp(const ApeirronApp());
 }
 
+/// Root app hosting the graph screen.
 class ApeirronApp extends StatelessWidget {
   const ApeirronApp({super.key});
 
@@ -21,17 +26,20 @@ class ApeirronApp extends StatelessWidget {
   }
 }
 
+/// Parsed nodes and links ready for the graph.
 class GraphData {
   GraphData(this.nodes, this.links);
   final List<ForceNode> nodes;
   final List<ForceLink> links;
 }
 
+/// Parses a `#rrggbb` string into an opaque [Color].
 Color _hex(String s) {
   final h = s.replaceFirst('#', '');
   return Color(int.parse('FF$h', radix: 16));
 }
 
+/// Loads and parses `assets/graph.json` into a [GraphData].
 Future<GraphData> _loadGraph() async {
   final raw = await rootBundle.loadString('assets/graph.json');
   final json = jsonDecode(raw) as Map<String, dynamic>;
@@ -60,6 +68,7 @@ Future<GraphData> _loadGraph() async {
   return GraphData(nodes, links);
 }
 
+/// Loads the graph asynchronously and shows the full-screen [ForceGraphView].
 class GraphScreen extends StatefulWidget {
   const GraphScreen({super.key});
 

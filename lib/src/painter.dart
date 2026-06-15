@@ -5,6 +5,12 @@ import 'package:flutter/widgets.dart';
 import 'package:force_graph/src/config.dart';
 import 'package:force_graph/src/controller.dart';
 
+/// Paints the graph: links beneath nodes, with hover/selection highlighting, an
+/// animated link-traversal effect, and labels.
+///
+/// Everything is drawn in screen space from the world-space node positions via
+/// [scale] and [offset]. Hover and traversal animations are driven by
+/// [hoverElapsedMs] (milliseconds since the current hover began).
 class ForceGraphPainter extends CustomPainter {
   ForceGraphPainter({
     required this.controller,
@@ -21,13 +27,25 @@ class ForceGraphPainter extends CustomPainter {
   final ForceGraphController controller;
   final ForceGraphConfig config;
   final ForceGraphTheme theme;
+
+  /// View zoom.
   final double scale;
+
+  /// View pan, in screen pixels.
   final Offset offset;
+
+  /// Currently hovered / selected node ids, or null.
   final String? hoveredId;
   final String? selectedId;
+
+  /// Milliseconds since the current hover began; drives the fade animations.
   final double hoverElapsedMs;
+
+  /// Cross-frame cache of laid-out label painters, owned by the widget state.
   final Map<String, TextPainter> labelCache;
 
+  /// Returns a cached (or freshly laid-out) label painter for the given text,
+  /// colour, and size.
   TextPainter _label(String text, Color color, double fontSize) {
     final key = '$text|${fontSize.toStringAsFixed(1)}|${color.toARGB32()}';
     final cached = labelCache[key];
@@ -50,6 +68,7 @@ class ForceGraphPainter extends CustomPainter {
     return tp;
   }
 
+  /// Maps a world-space point to screen-space.
   Offset _screen(double x, double y) =>
       Offset(x * scale + offset.dx, y * scale + offset.dy);
 
@@ -177,6 +196,7 @@ class ForceGraphPainter extends CustomPainter {
     }
   }
 
+  /// Strokes a dashed circle, used for the phantom-node ring.
   void _dashedCircle(Canvas canvas, Offset center, double radius, Paint paint) {
     const dash = 2.0;
     if (radius <= 0) return;
@@ -195,6 +215,8 @@ class ForceGraphPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
+  // Always repaints: the widget only rebuilds this painter on ticker frames,
+  // and node positions change every tick, so there is nothing to diff against.
   @override
   bool shouldRepaint(covariant ForceGraphPainter old) => true;
 }
