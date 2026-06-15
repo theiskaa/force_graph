@@ -102,6 +102,7 @@ class Quadtree {
     }
 
     int j;
+    var depth = 0;
     do {
       final created = List<QuadNode?>.filled(4, null);
       final internal = QuadNode()..children = created;
@@ -127,6 +128,11 @@ class Quadtree {
       }
       i = (bottom ? 2 : 0) | (right ? 1 : 0);
       j = ((exY >= ym ? 2 : 0) | (exX >= xm ? 1 : 0));
+      if (++depth > 64) {
+        leaf.next = node;
+        parent.children![i] = leaf;
+        return;
+      }
     } while (i == j);
     parent.children![j] = node;
     parent.children![i] = leaf;

@@ -15,7 +15,6 @@ class ForceSimulation {
   final List<Force> _forces = [];
 
   double alpha = 1;
-  double alphaMin = 0;
   double alphaDecay = 0.008;
   double alphaTarget = 0.02;
   double velocityRetain = 0.6;

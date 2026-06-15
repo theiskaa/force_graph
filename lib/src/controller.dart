@@ -8,14 +8,14 @@ import 'package:force_graph/src/simulation.dart';
 class ForceGraphController {
   ForceGraphController({
     required this.nodes,
-    required this.links,
+    required List<ForceLink> links,
     ForceGraphConfig config = const ForceGraphConfig(),
   }) : _config = config {
-    _build();
+    _build(links);
   }
 
   final List<ForceNode> nodes;
-  final List<ForceLink> links;
+  late final List<ForceLink> links;
 
   ForceGraphConfig _config;
   ForceGraphConfig get config => _config;
@@ -25,9 +25,15 @@ class ForceGraphController {
   late Map<String, Set<String>> neighbors;
 
   int tickCount = 0;
+  double meanKineticEnergy = 0;
 
-  void _build() {
+  void _build(List<ForceLink> rawLinks) {
     _byId = {for (final n in nodes) n.id: n};
+
+    links = [
+      for (final l in rawLinks)
+        if (_byId.containsKey(l.source) && _byId.containsKey(l.target)) l,
+    ];
 
     neighbors = {};
     for (final link in links) {
@@ -43,7 +49,6 @@ class ForceGraphController {
   void _applyForces() {
     simulation.alphaDecay = _config.alphaDecay;
     simulation.alphaTarget = _config.alphaTarget;
-    simulation.alphaMin = 0;
     simulation.velocityRetain = _config.velocityRetain;
 
     simulation.clearForces();
@@ -83,7 +88,7 @@ class ForceGraphController {
     tickCount++;
     final recenterPos = tickCount <= _config.recenterTicks;
 
-    var sumX = 0.0, sumY = 0.0, sumVx = 0.0, sumVy = 0.0;
+    var sumX = 0.0, sumY = 0.0, sumVx = 0.0, sumVy = 0.0, sumKe = 0.0;
     var count = 0;
     for (final n in nodes) {
       if (n.fx != null || n.fy != null) continue;
@@ -91,9 +96,15 @@ class ForceGraphController {
       sumY += n.y;
       sumVx += n.vx;
       sumVy += n.vy;
+      sumKe += n.vx * n.vx + n.vy * n.vy;
       count++;
     }
-    if (count == 0) return;
+    if (count == 0) {
+      meanKineticEnergy = 0;
+      return;
+    }
+
+    meanKineticEnergy = sumKe / count;
 
     final avgX = sumX / count;
     final avgY = sumY / count;
