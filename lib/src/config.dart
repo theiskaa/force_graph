@@ -15,8 +15,12 @@ class ForceGraphConfig {
     this.collideIterations = 3,
     this.alphaDecay = 0.008,
     this.alphaTarget = 0.02,
+    this.dragAlphaTarget = 0.3,
     this.velocityDecay = 0.4,
     this.recenterTicks = 300,
+    this.idleSleep = true,
+    this.sleepSpeedThreshold = 0.03,
+    this.sleepFrames = 30,
     this.radiusScale = 4.5,
     this.radiusBase = 3.5,
     this.zoomK = 0.65,
@@ -26,7 +30,7 @@ class ForceGraphConfig {
     this.maxZoom = 8,
     this.labelFontSize = 11,
     this.labelMaxFontSize = 13,
-    this.labelMinScreenFontSize = 1.5,
+    this.labelMinWorldFontSize = 1.5,
     this.hitRadiusMultiplier = 1,
     this.hitRadiusMin = 0,
   });
@@ -54,8 +58,12 @@ class ForceGraphConfig {
   final int collideIterations;
   final double alphaDecay;
   final double alphaTarget;
+  final double dragAlphaTarget;
   final double velocityDecay;
   final int recenterTicks;
+  final bool idleSleep;
+  final double sleepSpeedThreshold;
+  final int sleepFrames;
   final double radiusScale;
   final double radiusBase;
   final double zoomK;
@@ -65,7 +73,7 @@ class ForceGraphConfig {
   final double maxZoom;
   final double labelFontSize;
   final double labelMaxFontSize;
-  final double labelMinScreenFontSize;
+  final double labelMinWorldFontSize;
   final double hitRadiusMultiplier;
   final double hitRadiusMin;
 
@@ -101,8 +109,12 @@ class ForceGraphConfig {
     int? collideIterations,
     double? alphaDecay,
     double? alphaTarget,
+    double? dragAlphaTarget,
     double? velocityDecay,
     int? recenterTicks,
+    bool? idleSleep,
+    double? sleepSpeedThreshold,
+    int? sleepFrames,
     double? radiusScale,
     double? radiusBase,
     double? zoomK,
@@ -112,7 +124,7 @@ class ForceGraphConfig {
     double? maxZoom,
     double? labelFontSize,
     double? labelMaxFontSize,
-    double? labelMinScreenFontSize,
+    double? labelMinWorldFontSize,
     double? hitRadiusMultiplier,
     double? hitRadiusMin,
   }) {
@@ -126,8 +138,12 @@ class ForceGraphConfig {
       collideIterations: collideIterations ?? this.collideIterations,
       alphaDecay: alphaDecay ?? this.alphaDecay,
       alphaTarget: alphaTarget ?? this.alphaTarget,
+      dragAlphaTarget: dragAlphaTarget ?? this.dragAlphaTarget,
       velocityDecay: velocityDecay ?? this.velocityDecay,
       recenterTicks: recenterTicks ?? this.recenterTicks,
+      idleSleep: idleSleep ?? this.idleSleep,
+      sleepSpeedThreshold: sleepSpeedThreshold ?? this.sleepSpeedThreshold,
+      sleepFrames: sleepFrames ?? this.sleepFrames,
       radiusScale: radiusScale ?? this.radiusScale,
       radiusBase: radiusBase ?? this.radiusBase,
       zoomK: zoomK ?? this.zoomK,
@@ -137,8 +153,8 @@ class ForceGraphConfig {
       maxZoom: maxZoom ?? this.maxZoom,
       labelFontSize: labelFontSize ?? this.labelFontSize,
       labelMaxFontSize: labelMaxFontSize ?? this.labelMaxFontSize,
-      labelMinScreenFontSize:
-          labelMinScreenFontSize ?? this.labelMinScreenFontSize,
+      labelMinWorldFontSize:
+          labelMinWorldFontSize ?? this.labelMinWorldFontSize,
       hitRadiusMultiplier: hitRadiusMultiplier ?? this.hitRadiusMultiplier,
       hitRadiusMin: hitRadiusMin ?? this.hitRadiusMin,
     );
@@ -161,6 +177,21 @@ class ForceGraphTheme {
     this.traverseHead = const Color(0xFFA0A0B4),
     this.fontFamily,
   });
+
+  factory ForceGraphTheme.light({String? fontFamily}) => ForceGraphTheme(
+        background: const Color(0xFFF7F7F5),
+        line: const Color(0x2E5A5A69),
+        lineHover: const Color(0x8C44444F),
+        lineDim: const Color(0x0F8A8A95),
+        nodeDim: const Color(0x40A0A0AA),
+        label: const Color(0x99454552),
+        labelHover: const Color(0xF21A1A22),
+        labelDim: const Color(0x1A454552),
+        ring: const Color(0x66333340),
+        traverseTrail: const Color(0x148A8A95),
+        traverseHead: const Color(0xFF55556A),
+        fontFamily: fontFamily,
+      );
 
   final Color background;
   final Color line;
