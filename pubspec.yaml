@@ -1,6 +1,6 @@
 name: force_graph
 description: "A force-directed graph widget for Flutter — a faithful d3-force port with charge, link, and collide physics."
-version: 0.0.1
+version: 0.0.2
 homepage:
 
 environment:
