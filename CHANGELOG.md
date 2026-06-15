@@ -1,21 +1,20 @@
-## 0.0.2
+## 0.1.0
 
-* Fixed: programmatic `fitView`/`focusId` and the fit token now work after the user
-  has panned, zoomed, or tapped (the auto-fit guard no longer blocks explicit fits).
-* Changed: label visibility now matches the web original (threshold on world-space font).
-* Added: idle-sleep — the render loop halts when the layout settles and there is no
-  interaction, and wakes on touch/hover/scroll/data change. Configurable via
-  `idleSleep`, `sleepSpeedThreshold`, `sleepFrames` (default on).
-* Added: node drag raises `alphaTarget` (`dragAlphaTarget`) like d3, restoring the floor
-  on release.
-* Added: `ForceGraphView.semanticLabel`, `ForceGraphTheme.light()`.
-* Performance: cache label `TextPainter`s; cache the resolved (mobile/desktop) config so
-  forces are no longer rebuilt on every frame.
-* Robustness: dangling links are filtered instead of crashing; quadtree split has a depth
-  cap to prevent hangs on sub-precision coincident points; controller rebuilds when the
-  node/link set changes; mid-gesture finger-count transitions release the dragged node.
+Initial release.
 
-## 0.0.1
-
-* Initial release: d3-force physics port (charge, link, collide) with an interactive
-  `ForceGraphView` widget and configurable physics/theme.
+* A faithful Dart port of d3-force — many-body charge (Barnes-Hut quadtree), link
+  springs with degree-weighted bias, and hard-sphere collision, integrated with
+  velocity-Verlet. A permanent alpha floor plus per-tick recenter and momentum damping
+  keep the layout alive without drifting.
+* `ForceGraphView` widget with pan, zoom, drag-to-pin, hover (desktop), double-tap
+  (touch), and an auto-fit pass on first render that yields to the first user gesture.
+* `CustomPainter` rendering: zoom-damped node radii, labels, hover/neighbor dimming,
+  phantom dashed rings, and an animated link-traversal highlight.
+* Idle-sleep — the render loop halts when the layout settles and wakes on
+  interaction or data change. Configurable via `idleSleep`, `sleepSpeedThreshold`,
+  `sleepFrames` (default on).
+* Fully configurable physics, sizing, and colors via `ForceGraphConfig` and
+  `ForceGraphTheme` (including `ForceGraphConfig.mobile()` and `ForceGraphTheme.light()`),
+  with automatic desktop/mobile switching at a breakpoint.
+* Cached label painters and resolved config for steady-state performance; dangling
+  links are filtered and the quadtree split is depth-capped for robustness.
